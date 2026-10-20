@@ -26,6 +26,7 @@ def show_folder(path, fallback) -> None:
     El tipo por defecto de las carpetas puede ser una terminal (kitty-open), así
     que se pide al explorador directamente; si no hay ninguno, `fallback()`.
     """
+
     def done(bus, res):
         try:
             bus.call_finish(res)
