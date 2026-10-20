@@ -1,0 +1,11 @@
+[Unit]
+Description=XAMPP Apache
+Requires=xampp-php.service
+After=xampp-php.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/httpd -f $etc/httpd.conf -D FOREGROUND
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=XAMPP PHP-FPM
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/php-fpm -F -y $etc/php-fpm.conf -c $etc/php.ini
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=XAMPP MariaDB
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mariadbd --defaults-file=$etc/my.cnf
+
+[Install]
+WantedBy=default.target

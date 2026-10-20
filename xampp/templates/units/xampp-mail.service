@@ -1,0 +1,11 @@
+[Unit]
+Description=XAMPP Mailpit
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mailpit --smtp 127.0.0.1:$smtp_port --listen 127.0.0.1:$mail_web_port
+StandardOutput=append:$logs/mailpit.log
+StandardError=append:$logs/mailpit.log
+
+[Install]
+WantedBy=default.target

@@ -3,7 +3,9 @@
 import json
 import os
 from dataclasses import asdict, dataclass, fields
+from importlib.resources import files
 from pathlib import Path
+from string import Template
 
 
 @dataclass(frozen=True)
@@ -76,3 +78,49 @@ def load_settings(paths: Paths) -> Settings:
 def save_settings(paths: Paths, s: Settings) -> None:
     paths.etc.mkdir(parents=True, exist_ok=True)
     _settings_file(paths).write_text(json.dumps(asdict(s), indent=2) + "\n")
+
+
+ETC_TEMPLATES = ("httpd.conf", "php-fpm.conf", "php.ini", "my.cnf")
+UNIT_TEMPLATES = (
+    "xampp-apache.service", "xampp-php.service",
+    "xampp-mariadb.service", "xampp-mail.service",
+)
+
+
+def https_effective(paths: Paths, s: Settings) -> bool:
+    return (
+        s.https
+        and (paths.ssl / "localhost.pem").exists()
+        and (paths.ssl / "localhost-key.pem").exists()
+    )
+
+
+def _template(name: str) -> Template:
+    return Template(files("xampp").joinpath("templates", name).read_text())
+
+
+def render_all(paths: Paths, s: Settings) -> list[str]:
+    """Genera etc/ y las units desde las plantillas. Devuelve avisos."""
+    warnings = []
+    paths.ensure_dirs()
+    paths.units.mkdir(parents=True, exist_ok=True)
+
+    values = {k: str(v) for k, v in asdict(paths).items()}
+    values.update({k: str(v) for k, v in asdict(s).items()})
+    values["ssl_block"] = ""
+    if https_effective(paths, s):
+        values["ssl_block"] = _template("httpd-ssl.conf").substitute(values)
+    elif s.https:
+        warnings.append(
+            "HTTPS desactivado: falta el certificado en "
+            f"{paths.ssl}. Ejecuta xampp --setup para crearlo."
+        )
+
+    for name in ETC_TEMPLATES:
+        (paths.etc / name).write_text(_template(name).substitute(values))
+    for name in UNIT_TEMPLATES:
+        (paths.units / name).write_text(_template(f"units/{name}").substitute(values))
+
+    if not any(paths.htdocs.iterdir()):
+        (paths.htdocs / "index.php").write_text(_template("index.php").substitute(values))
+    return warnings
