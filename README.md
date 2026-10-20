@@ -28,3 +28,10 @@ python -m venv --system-site-packages .venv && .venv/bin/pip install pytest
 .venv/bin/python -m pytest -q   # tests unitarios
 bash tests/e2e.sh               # prueba completa sobre la instalación real
 ```
+
+## Licencia
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md): puedes usar, copiar, modificar y
+compartir este proyecto gratis para cualquier fin **no comercial** (uso
+personal, estudio, investigación, organizaciones sin ánimo de lucro…).
+No está permitido venderlo ni usarlo con fines comerciales sin permiso del autor.
