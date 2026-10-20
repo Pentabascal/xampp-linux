@@ -29,3 +29,8 @@ def test_paths_from_env(monkeypatch, tmp_path):
     p = Paths.default()
     assert p.htdocs == tmp_path / "htdocs"
     assert p.mysql == tmp_path / "data" / "mysql"
+
+
+def test_settings_file_private(paths):
+    save_settings(paths, Settings(mariadb_root_password="secreta"))
+    assert (paths.etc / "settings.json").stat().st_mode & 0o077 == 0

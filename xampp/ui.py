@@ -8,12 +8,24 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gio, GLib  # noqa: E402
 
+from .systemd import error_result  # noqa: E402,F401
 
-def in_thread(work, done=None) -> None:
-    """Ejecuta `work()` en un hilo y `done(resultado)` en el hilo de GTK."""
+
+def in_thread(work, done=None, on_error=None) -> None:
+    """Ejecuta `work()` en un hilo y `done(resultado)` en el hilo de GTK.
+
+    Si `work()` lanza una excepción se llama a `on_error(e)`; por defecto,
+    a `done(error_result(e))`, para que la interfaz nunca se quede esperando.
+    """
 
     def target():
-        result = work()
+        try:
+            result = work()
+        except Exception as e:
+            exc = e  # `e` deja de existir al salir del except
+            handler = on_error or (lambda e: done and done(error_result(e)))
+            GLib.idle_add(lambda: (handler(exc), False)[1])
+            return
         if done is not None:
             GLib.idle_add(lambda: (done(result), False)[1])
 

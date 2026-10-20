@@ -4,7 +4,7 @@ import os
 import signal
 import time
 
-from .ui import in_thread, show_folder  # noqa: I001  (fija versiones de GTK/Adw antes de importarlas)
+from .ui import error_result, in_thread, show_folder  # noqa: I001  (fija versiones de GTK/Adw antes de importarlas)
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from . import ports
@@ -147,8 +147,13 @@ class MainWindow(Adw.ApplicationWindow):
     def _poll(self) -> bool:
         if not self._polling:
             self._polling = True
-            in_thread(lambda: {id: self.controller.state(id) for id in self.rows}, self._apply_states)
+            in_thread(lambda: {id: self.controller.state(id) for id in self.rows}, self._apply_states,
+                      on_error=self._poll_failed)
         return True
+
+    def _poll_failed(self, e: Exception) -> None:
+        self._polling = False
+        self.log(f"No se pudo leer el estado: {error_result(e).output}")
 
     def _apply_states(self, states: dict) -> None:
         self._polling = False
@@ -204,7 +209,7 @@ class MainWindow(Adw.ApplicationWindow):
             row.toggle.set_sensitive(True)
             self._port_conflict(svc, taken)
 
-        in_thread(check, checked)
+        in_thread(check, checked, on_error=lambda e: done(error_result(e), f"Iniciar {svc.name}"))
 
     def _port_conflict(self, svc: Service, taken: dict) -> None:
         msg = "\n".join(ports.describe(p, o) for p, o in taken.items())
@@ -285,7 +290,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.toast("Reinicia los servicios para aplicar los cambios")
             self._poll()
 
-        in_thread(work, done)
+        in_thread(work, done, on_error=lambda e: self.report("Guardar ajustes", error_result(e)))
 
     # --- accesos ------------------------------------------------------------
 

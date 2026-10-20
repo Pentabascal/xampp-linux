@@ -12,6 +12,13 @@ class Result:
     output: str
 
 
+def error_result(e: Exception) -> Result:
+    """Convierte una excepción inesperada en un Result legible."""
+    if isinstance(e, FileNotFoundError) and e.filename:
+        return Result(False, f"Falta {e.filename}. Ejecuta xampp --setup para instalarlo.")
+    return Result(False, f"{type(e).__name__}: {e}")
+
+
 class Systemd:
     def __init__(self, run=subprocess.run):
         self._run = run

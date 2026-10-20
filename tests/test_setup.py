@@ -73,14 +73,19 @@ def test_db_step_initializes(paths, tmp_path):
 
 
 def test_cert_step_enables_https(paths, tmp_path):
-    steps, run = make_steps(paths, tmp_path)
+    def run(args, **kw):
+        import subprocess
+        if args[0] == "mkcert":  # mkcert real crea los dos archivos
+            (paths.ssl / "localhost.pem").write_text("c")
+            (paths.ssl / "localhost-key.pem").write_text("k")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    steps = {s.id: s for s in setup.steps(paths, Settings(), Systemd(FakeRun()), run=run,
+                                           home=tmp_path)}
     steps["files"].fn()
-    paths.ssl.mkdir(parents=True, exist_ok=True)
-    (paths.ssl / "localhost.pem").write_text("c")
-    (paths.ssl / "localhost-key.pem").write_text("k")
+    assert "Listen 127.0.0.1:443" not in (paths.etc / "httpd.conf").read_text()
     assert steps["cert"].fn().ok
-    assert run.calls[-1][0] == "mkcert"
-    assert "Listen 443" in (paths.etc / "httpd.conf").read_text()
+    assert "Listen 127.0.0.1:443" in (paths.etc / "httpd.conf").read_text()
 
 
 def test_step_failure_is_reported(paths, tmp_path):
@@ -102,3 +107,31 @@ def test_root_script_guarded():
     assert "// xampp-linux" in script
     assert "grep -q" in script
     assert "AllowNoPassword" in script
+
+
+def test_files_step_keeps_existing_config(paths, tmp_path):
+    steps, _ = make_steps(paths, tmp_path)
+    steps["files"].fn()
+    (paths.etc / "httpd.conf").write_text("# editado a mano\n")
+    r = steps["files"].fn()
+    assert r.ok and "conserva" in r.output
+    assert (paths.etc / "httpd.conf").read_text() == "# editado a mano\n"
+
+
+def test_cert_step_skips_when_present(paths, tmp_path):
+    paths.ssl.mkdir(parents=True)
+    (paths.ssl / "localhost.pem").write_text("c")
+    (paths.ssl / "localhost-key.pem").write_text("k")
+    steps, run = make_steps(paths, tmp_path)
+    assert steps["cert"].fn().ok
+    assert not any(c[0] == "mkcert" for c in run.calls)
+
+
+def test_step_exception_becomes_result(paths, tmp_path):
+    def run(args, **kw):
+        raise FileNotFoundError(2, "No such file or directory", args[0])
+
+    steps = {s.id: s for s in setup.steps(paths, Settings(), Systemd(FakeRun()), run=run,
+                                           home=tmp_path)}
+    r = steps["interactive"].fn()
+    assert not r.ok and ("kitty" in r.output or "mkcert" in r.output)

@@ -9,7 +9,7 @@ from string import Template
 from typing import Callable
 
 from .config import Paths, Settings, is_installed, render_all, save_settings
-from .systemd import Result, Systemd
+from .systemd import Result, Systemd, error_result
 
 REPO_PACKAGES = ("apache", "php", "php-fpm", "php-gd", "mariadb", "phpmyadmin", "mkcert", "nss")
 AUR_PACKAGES = ("mailpit-bin",)
@@ -77,10 +77,16 @@ def steps(paths: Paths, settings: Settings, systemd: Systemd,
         return Result(False, "Falta Mailpit o el certificado raíz de mkcert; vuelve a intentarlo")
 
     def files_step() -> Result:
+        if (paths.etc / "httpd.conf").exists():
+            return Result(True, f"Se conserva la configuración de {paths.etc} "
+                                "(para regenerarla usa Ajustes)")
         warnings = render_all(paths, settings)
         return Result(True, "\n".join(warnings) or f"Configuración en {paths.etc}")
 
     def cert() -> Result:
+        pems = (paths.ssl / "localhost.pem", paths.ssl / "localhost-key.pem")
+        if all(p.exists() for p in pems):
+            return Result(True, "El certificado ya existe")
         paths.ssl.mkdir(parents=True, exist_ok=True)
         r = sh("mkcert",
                "-cert-file", str(paths.ssl / "localhost.pem"),
@@ -113,7 +119,15 @@ def steps(paths: Paths, settings: Settings, systemd: Systemd,
             save_settings(paths, settings)
         return Result(True, f"Lanzador en {exe}")
 
-    return [
+    def safe(fn: Callable[[], Result]) -> Callable[[], Result]:
+        def wrapper() -> Result:
+            try:
+                return fn()
+            except Exception as e:
+                return error_result(e)
+        return wrapper
+
+    return [Step(s.id, s.title, safe(s.fn)) for s in [
         Step("root", "Paquetes y permisos (pide contraseña)", root),
         Step("interactive", "Mailpit y certificado raíz (terminal)", interactive),
         Step("files", "Carpetas y configuración", files_step),
@@ -121,5 +135,5 @@ def steps(paths: Paths, settings: Settings, systemd: Systemd,
         Step("db", "Base de datos", db),
         Step("units", "Servicios", units),
         Step("launcher", "Acceso directo", launcher),
-    ]
+    ]]
 

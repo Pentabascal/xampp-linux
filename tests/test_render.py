@@ -29,7 +29,7 @@ def test_httpd_conf_paths(paths):
     conf = (paths.etc / "httpd.conf").read_text()
     assert f'DocumentRoot "{paths.htdocs}"' in conf
     assert f"proxy:unix:{paths.run}/php-fpm.sock" in conf
-    assert "Listen 80\n" in conf
+    assert "Listen 127.0.0.1:80\n" in conf
     assert "Alias /phpmyadmin" in conf
 
 
@@ -50,13 +50,13 @@ def test_httpd_conf_https_requires_cert(paths):
     _cert(paths)
     assert render_all(paths, Settings()) == []
     conf = (paths.etc / "httpd.conf").read_text()
-    assert "Listen 443" in conf
+    assert "Listen 127.0.0.1:443" in conf
     assert f"SSLCertificateFile {paths.ssl}/localhost.pem" in conf
 
 
 def test_custom_ports(paths):
     render_all(paths, Settings(http_port=8080, mariadb_port=3307, smtp_port=2025))
-    assert "Listen 8080\n" in (paths.etc / "httpd.conf").read_text()
+    assert "Listen 127.0.0.1:8080\n" in (paths.etc / "httpd.conf").read_text()
     assert "port=3307" in (paths.etc / "my.cnf").read_text()
     assert "-S 127.0.0.1:2025" in (paths.etc / "php.ini").read_text()
 
@@ -91,3 +91,12 @@ def test_render_all_never_touches_htdocs_or_data(paths):
     render_all(paths, Settings())
     assert a.read_text() == "<?php echo 1;" and a.stat().st_mtime == 1
     assert x.read_text() == "datos" and x.stat().st_mtime == 1
+
+
+def test_httpd_listens_only_on_localhost(paths):
+    _cert(paths)
+    render_all(paths, Settings())
+    conf = (paths.etc / "httpd.conf").read_text()
+    assert "Listen 127.0.0.1:80\n" in conf and "Listen [::1]:80\n" in conf
+    assert "Listen 127.0.0.1:443\n" in conf and "Listen [::1]:443\n" in conf
+    assert re.search(r"^Listen \d+$", conf, re.M) is None

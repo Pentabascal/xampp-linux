@@ -77,7 +77,9 @@ def load_settings(paths: Paths) -> Settings:
 
 def save_settings(paths: Paths, s: Settings) -> None:
     paths.etc.mkdir(parents=True, exist_ok=True)
-    _settings_file(paths).write_text(json.dumps(asdict(s), indent=2) + "\n")
+    f = _settings_file(paths)
+    f.write_text(json.dumps(asdict(s), indent=2) + "\n")
+    f.chmod(0o600)  # contiene la contraseña de root de MariaDB
 
 
 ETC_TEMPLATES = ("httpd.conf", "php-fpm.conf", "php.ini", "my.cnf")
