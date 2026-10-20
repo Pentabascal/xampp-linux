@@ -1,0 +1,4 @@
+LISTEN 0      511                *:80              *:*    users:(("httpd",pid=10026,fd=4),("httpd",pid=10050,fd=4))
+LISTEN 0      80         127.0.0.1:3306      0.0.0.0:*    
+LISTEN 0      511             [::]:443            [::]:*    users:(("httpd",pid=10026,fd=6))
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    
