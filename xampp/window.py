@@ -4,7 +4,7 @@ import os
 import signal
 import time
 
-from .ui import in_thread  # noqa: I001  (fija versiones de GTK/Adw antes de importarlas)
+from .ui import in_thread, show_folder  # noqa: I001  (fija versiones de GTK/Adw antes de importarlas)
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from . import ports
@@ -302,4 +302,6 @@ class MainWindow(Adw.ApplicationWindow):
         Gtk.UriLauncher(uri=uri).launch(self, None, None)
 
     def _open_htdocs(self, *_):
-        Gtk.FileLauncher(file=Gio.File.new_for_path(str(self.paths.htdocs))).launch(self, None, None)
+        self.paths.htdocs.mkdir(parents=True, exist_ok=True)
+        show_folder(self.paths.htdocs, lambda: Gtk.FileLauncher(
+            file=Gio.File.new_for_path(str(self.paths.htdocs))).launch(self, None, None))
