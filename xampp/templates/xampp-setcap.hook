@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = apache
+
+[Action]
+Description = xampp-linux: permiso de puertos bajos para httpd
+When = PostTransaction
+Exec = /usr/bin/setcap cap_net_bind_service=+ep /usr/bin/httpd

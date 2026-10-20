@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=XAMPP
+Comment=Panel de control de Apache, PHP, MariaDB y Mailpit
+Exec=$launcher
+Icon=network-server
+Categories=Development;
+Terminal=false
