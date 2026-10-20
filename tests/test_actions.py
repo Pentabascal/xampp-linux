@@ -132,3 +132,33 @@ def test_stop_all_reverse_order(paths):
     assert make(paths, sd=sd).stop_all().ok
     assert [u for _, u in sd.calls] == [
         "xampp-mail.service", "xampp-mariadb.service", "xampp-php.service", "xampp-apache.service"]
+
+
+def test_change_root_password_requires_running_mariadb(paths):
+    run = FakeRun()
+    r = make(paths, run=run).change_root_password("", "nueva")
+    assert not r.ok and "Inicia MariaDB" in r.output
+    assert run.calls == []
+
+
+def test_change_root_password_runs_alter_user(paths):
+    run = FakeRun()
+    sd = FakeSystemd(states={"xampp-mariadb.service": "active"})
+    assert make(paths, sd=sd, run=run).change_root_password("vieja", "o'k\\")
+    args = run.calls[0]
+    assert args[:4] == ["/usr/bin/mariadb", "-uroot", "-S", str(paths.run / "mariadb.sock")]
+    assert args[-1] == "ALTER USER 'root'@'localhost' IDENTIFIED BY 'o\\'k\\\\'"
+    assert "vieja" not in " ".join(args)
+
+
+def test_change_root_password_passes_old_via_env(paths):
+    seen = {}
+
+    def run(args, **kw):
+        seen.update(kw.get("env") or {})
+        import subprocess
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    sd = FakeSystemd(states={"xampp-mariadb.service": "active"})
+    make(paths, sd=sd, run=run).change_root_password("vieja", "nueva")
+    assert seen.get("MYSQL_PWD") == "vieja"

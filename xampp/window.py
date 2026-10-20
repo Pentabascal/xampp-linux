@@ -9,8 +9,10 @@ from gi.repository import Adw, Gio, GLib, Gtk
 
 from . import ports
 from .actions import Controller
-from .config import Paths, https_effective, load_settings
+from .config import Paths, Settings, https_effective, load_settings, render_all, save_settings
+from .logview import LogWindow
 from .services import SERVICES, Service
+from .settings_dialog import SettingsDialog
 from .systemd import Systemd
 
 STATE_CLASS = {"active": "success", "failed": "error"}
@@ -29,9 +31,11 @@ class ServiceRow(Adw.ActionRow):
         self.toggle = Gtk.Button(label="Iniciar", valign=Gtk.Align.CENTER, width_request=80)
         self.toggle.connect("clicked", lambda *_: window.toggle(self))
         self.log = Gtk.Button(icon_name="text-x-generic-symbolic", tooltip_text="Ver log",
-                              valign=Gtk.Align.CENTER, sensitive=False)
+                              valign=Gtk.Align.CENTER)
+        self.log.connect("clicked", lambda *_: LogWindow(window, window.paths, svc).present())
         self.cfg = Gtk.Button(icon_name="document-edit-symbolic", tooltip_text="Editar configuración",
-                              valign=Gtk.Align.CENTER, sensitive=False)
+                              valign=Gtk.Align.CENTER)
+        self.cfg.connect("clicked", lambda *_: window.edit_config(svc))
         for b in (self.log, self.cfg):
             b.add_css_class("flat")
         self.add_suffix(self.toggle)
@@ -59,7 +63,9 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title="XAMPP", default_width=640, default_height=720)
         self.paths = paths
         self._polling = False
+        self._edited: dict[str, float] = {}  # servicio → mtime del config al abrirlo
         self.reload_settings()
+        self.connect("notify::is-active", self._check_edited)
 
         self.toasts = Adw.ToastOverlay()
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
@@ -113,8 +119,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.toasts.set_child(Gtk.ScrolledWindow(child=clamp, hscrollbar_policy=Gtk.PolicyType.NEVER))
 
         header = Adw.HeaderBar()
-        self.settings_button = Gtk.Button(icon_name="emblem-system-symbolic", tooltip_text="Ajustes",
-                                          sensitive=False)
+        self.settings_button = Gtk.Button(icon_name="emblem-system-symbolic", tooltip_text="Ajustes")
+        self.settings_button.connect(
+            "clicked", lambda *_: SettingsDialog(self.settings, self.apply_settings).present(self))
         header.pack_end(self.settings_button)
         view = Adw.ToolbarView(content=self.toasts)
         view.add_top_bar(header)
@@ -223,6 +230,62 @@ class MainWindow(Adw.ApplicationWindow):
     def _run_all(self, fn, what: str) -> None:
         self.log(f"{what}…")
         in_thread(fn, lambda r: self.report(what, r))
+
+    # --- configuración ------------------------------------------------------
+
+    def _config_path(self, svc: Service):
+        return self.paths.etc / svc.config
+
+    def edit_config(self, svc: Service) -> None:
+        path = self._config_path(svc)
+        self._edited[svc.id] = path.stat().st_mtime if path.exists() else 0
+        Gtk.FileLauncher(file=Gio.File.new_for_path(str(path))).launch(self, None, None)
+
+    def _check_edited(self, *_):
+        if not self.is_active():
+            return
+        for id, mtime in list(self._edited.items()):
+            svc = self.rows[id].svc
+            path = self._config_path(svc)
+            if path.exists() and path.stat().st_mtime != mtime:
+                del self._edited[id]
+                self.log(f"Configuración de {svc.name} modificada")
+                self.toast(f"Configuración de {svc.name} modificada", "Reiniciar",
+                           lambda svc=svc: self._restart(svc))
+
+    def _restart(self, svc: Service) -> None:
+        in_thread(lambda: self.controller.restart(svc.id),
+                  lambda r: self.report(f"Reiniciar {svc.name}", r))
+
+    def apply_settings(self, new: Settings) -> None:
+        old = self.settings
+
+        def work():
+            notes = []
+            if new.mariadb_root_password != old.mariadb_root_password:
+                r = self.controller.change_root_password(old.mariadb_root_password,
+                                                         new.mariadb_root_password)
+                if r.ok:
+                    notes.append("Contraseña de root de MariaDB cambiada")
+                else:
+                    notes.append(f"No se cambió la contraseña de root: {r.output}")
+                    new.mariadb_root_password = old.mariadb_root_password
+            save_settings(self.paths, new)
+            notes += render_all(self.paths, new)
+            reload = self.controller.systemd.daemon_reload()
+            if not reload.ok:
+                notes.append(reload.output)
+            return notes
+
+        def done(notes):
+            self.reload_settings()
+            for n in notes:
+                self.log(n)
+            self.log("Configuraciones regeneradas")
+            self.toast("Reinicia los servicios para aplicar los cambios")
+            self._poll()
+
+        in_thread(work, done)
 
     # --- accesos ------------------------------------------------------------
 

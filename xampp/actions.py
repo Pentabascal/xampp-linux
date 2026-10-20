@@ -1,5 +1,6 @@
 """Iniciar, parar y reiniciar servicios con las comprobaciones previas."""
 
+import os
 import subprocess
 from dataclasses import replace
 
@@ -72,6 +73,17 @@ class Controller:
         unit = get(id).unit
         r = self.systemd.restart(unit)
         return r if r.ok else self._with_journal(unit, r)
+
+    def change_root_password(self, old: str, new: str) -> Result:
+        if self.state("mariadb") != "active":
+            return Result(False, "Inicia MariaDB para cambiar la contraseña")
+        quoted = new.replace("\\", "\\\\").replace("'", "\\'")
+        p = self._run(
+            ["/usr/bin/mariadb", "-uroot", "-S", str(self.paths.run / "mariadb.sock"), "-e",
+             f"ALTER USER 'root'@'localhost' IDENTIFIED BY '{quoted}'"],
+            capture_output=True, text=True, env={**os.environ, "MYSQL_PWD": old},
+        )
+        return Result(p.returncode == 0, p.stderr.strip())
 
     def _all(self, action, services) -> Result:
         failures = []
