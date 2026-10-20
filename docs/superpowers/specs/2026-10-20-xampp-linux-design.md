@@ -25,7 +25,7 @@ Motivo: FlyEnv resultó demasiado complejo; el XAMPP oficial se actualiza poco.
 
 ## Paquetes
 
-- Repos oficiales: `apache`, `php`, `php-fpm`, `mariadb`, `phpmyadmin`, `mkcert`
+- Repos oficiales: `apache`, `php`, `php-fpm`, `php-gd`, `mariadb`, `phpmyadmin`, `mkcert`, `nss`
 - AUR: `mailpit-bin`
 
 ## Estructura
